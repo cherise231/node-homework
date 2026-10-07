@@ -2,7 +2,7 @@
 
 ## What is Node.js?
 
-Answer here..
+Node.js is a runtime environment that lets you run JavaScript outside the browser to do backend work. That means calling APIs, working with databases like Supabase, and reading or writing files.
 
 ## How does Node.js differ from running JavaScript in the browser?
 
