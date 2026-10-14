@@ -24,9 +24,6 @@ app.all("/{*splat}", (req, res) => {
 
 const port = process.env.PORT || 3000;
 
-// const server = app.listen(port, () => {
-//   console.log(`Server is listening on port ${port}...`);
-// });
 
 const server = app.listen(port, (error) => {
   if (error) {
