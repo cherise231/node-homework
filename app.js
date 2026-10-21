@@ -1,10 +1,28 @@
 const express = require("express");
 const timeRouter = require("./routes/timeRoutes");
 
+const userRoutes = require("./routes/userRoutes");
+
+const notFound = require("./middleware/not-found");
+
+const errorHandler = require("./middleware/error-handler");
+
 const app = express();
 
+// initialize global.user_id = null
+global.user_id = null;
+
+//initialize global.users = [];
+global.users = [];
+
+//initialize global.tasks = [];
+global.tasks = [];
+
 app.use(express.json());
+
 app.use("/api", timeRouter);
+//mount the user router at /api/users
+app.use("/api/users", userRoutes);
 
 app.get("/", (req, res) => {
   res.send("Hello, World!");
@@ -16,14 +34,19 @@ app.post("/testpost", (req, res) => {
   });
 });
 
-app.all("/{*splat}", (req, res) => {
-  res.status(404).json({
-    message: `No route found for ${req.method} ${req.path}`,
-  });
-});
+//add a not-found middleware after your routes
+app.use(notFound);
+
+//add a error-handler middleware at the end
+app.use(errorHandler);
+
+// app.all("/{*splat}", (req, res) => {
+//   res.status(404).json({
+//     message: `No route found for ${req.method} ${req.path}`,
+//   });
+// });
 
 const port = process.env.PORT || 3000;
-
 
 const server = app.listen(port, (error) => {
   if (error) {
