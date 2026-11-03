@@ -9,6 +9,10 @@ const errorHandler = require("./middleware/error-handler");
 
 const app = express();
 
+const authMiddleware = require("./middleware/auth");
+
+const taskRouter = require("./routes/taskRoutes");
+
 // initialize global.user_id = null
 global.user_id = null;
 
@@ -18,7 +22,11 @@ global.users = [];
 //initialize global.tasks = [];
 global.tasks = [];
 
+//Parse incoming JSON request bodies
 app.use(express.json());
+
+//Protect task routes
+app.use("/api/tasks", authMiddleware, taskRouter);
 
 app.use("/api", timeRouter);
 //mount the user router at /api/users
