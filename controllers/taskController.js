@@ -1,13 +1,14 @@
 const { taskSchema, patchTaskSchema } = require("../validation/taskSchema");
+const pool = require("../db/pg-pool");
 
-const taskCounter = (() => {
-  let lastTaskNumber = 0;
+// const taskCounter = (() => {
+//   let lastTaskNumber = 0;
 
-  return () => {
-    lastTaskNumber = lastTaskNumber + 1;
-    return lastTaskNumber;
-  };
-})();
+//   return () => {
+//     lastTaskNumber = lastTaskNumber + 1;
+//     return lastTaskNumber;
+//   };
+// })();
 
 exports.create = async (req, res) => {
   if (!req.body) req.body = {};
@@ -19,38 +20,53 @@ exports.create = async (req, res) => {
   }
 
   // build and store the task after validation passes
-  const newTask = {
-    id: taskCounter(),
-    userId: global.user_id.email,
-    ...value,
-  };
+  // const newTask = {
+  //   id: taskCounter(),
+  //   userId: global.user_id.email,
+  //   ...value,
+  // };
 
-  global.tasks.push(newTask);
+  // global.tasks.push(newTask);
 
-  const { userId, ...sanitizedTask } = newTask;
+  // const { userId, ...sanitizedTask } = newTask;
 
-  return res.status(201).json(sanitizedTask);
+  // return res.status(201).json(sanitizedTask);
+
+  const result = await pool.query(
+    `INSERT INTO tasks (title, is_completed, user_id)
+     VALUES ($1, $2, $3)
+     RETURNING id, title, is_completed`,
+    [value.title, value.isCompleted, global.user_id],
+  );
+
+  return res.status(201).json(result.rows[0]);
 };
 
 exports.index = async (req, res) => {
-  if (!global.tasks) global.tasks = [];
-
-  const userTasks = global.tasks.filter(
-    (task) => task.userId === global.user_id.email,
+  const result = await pool.query(
+    `SELECT id, title, is_completed
+     FROM tasks
+     WHERE user_id = $1`,
+    [global.user_id],
   );
+  // if (!global.tasks) global.tasks = [];
 
-  if (userTasks.length === 0) {
+  // const userTasks = global.tasks.filter(
+  //   (task) => task.userId === global.user_id.email,
+  // );
+
+  if (result.rows.length === 0) {
     return res.status(404).json({
       message: "No task found for user",
     });
   }
 
-  const sanitizedTask = userTasks.map((task) => {
-    const { userId, ...sanitizedTask } = task;
-    return sanitizedTask;
-  });
+  return res.status(200).json(result.rows);
 
-  return res.status(200).json(sanitizedTask);
+  // const sanitizedTask = userTasks.map((task) => {
+  //   const { userId, ...sanitizedTask } = task;
+  //   return sanitizedTask;
+  // });
 };
 
 exports.show = async (req, res) => {
@@ -61,18 +77,30 @@ exports.show = async (req, res) => {
     });
   }
 
-  const task = global.tasks.find(
-    (task) => task.id === taskId && task.userId === global.user_id.email,
+  const result = await pool.query(
+    `SELECT id, title, is_completed
+     FROM tasks
+     WHERE id = $1 AND user_id = $2`,
+    [taskId, global.user_id],
   );
 
-  if (!task) {
+  if (result.rows.length === 0) {
     return res.status(404).json({
       message: "No matching task exists.",
     });
   }
+  return res.status(200).json(result.rows[0]);
 
-  const { userId, ...sanitizedTask } = task;
-  return res.status(200).json(sanitizedTask);
+  //   (task) => task.id === taskId && task.userId === global.user_id.email,
+  // );
+
+  // if (!task) {
+  //   return res.status(404).json({
+  //     message: "No matching task exists.",
+  //   });
+  // }
+
+  // const { userId, ...sanitizedTask } = task;
 };
 
 exports.update = async (req, res) => {
@@ -92,24 +120,41 @@ exports.update = async (req, res) => {
 
   // convert req.params.id to a number
   const taskId = parseInt(req.params?.id);
+
   if (!taskId) {
     return res.status(400).json({
       message: "The task ID passed is not valid.",
     });
   }
-  const task = global.tasks.find(
-    (task) => task.id === taskId && task.userId === global.user_id.email,
+
+  const result = await pool.query(
+    `UPDATE tasks
+     SET title = COALESCE($1, title),
+         is_completed = COALESCE($2, is_completed)
+     WHERE id = $3 AND user_id = $4
+     RETURNING id, title, is_completed`,
+    [value.title ?? null, value.isCompleted ?? null, taskId, global.user_id],
   );
 
-  if (!task) {
+  if (result.rows.length === 0) {
     return res.status(404).json({
       message: "No matching task exists.",
     });
   }
+  return res.status(200).json(result.rows[0]);
+  // const task = global.tasks.find(
+  //   (task) => task.id === taskId && task.userId === global.user_id.email,
+  // );
 
-  Object.assign(task, value);
-  const { userId, ...sanitizedTask } = task;
-  return res.status(200).json(sanitizedTask);
+  // if (!task) {
+  //   return res.status(404).json({
+  //     message: "No matching task exists.",
+  //   });
+  // }
+
+  // Object.assign(task, value);
+  // const { userId, ...sanitizedTask } = task;
+  // return res.status(200).json(sanitizedTask);
 };
 
 exports.deleteTask = async (req, res) => {
@@ -120,19 +165,32 @@ exports.deleteTask = async (req, res) => {
     });
   }
 
-  const taskIndex = global.tasks.findIndex(
-    (task) => task.id === taskId && task.userId === global.user_id.email,
+  const result = await pool.query(
+    `DELETE FROM tasks
+     WHERE id = $1 AND user_id = $2
+     RETURNING id, title, is_completed`,
+    [taskId, global.user_id],
   );
 
-  if (taskIndex === -1) {
+  if (result.rows.length === 0) {
     return res.status(404).json({
       message: "No matching task exists.",
     });
   }
+  return res.status(200).json(result.rows[0]);
+  // const taskIndex = global.tasks.findIndex(
+  //   (task) => task.id === taskId && task.userId === global.user_id.email,
+  // );
 
-  const [deletedTask] = global.tasks.splice(taskIndex, 1);
-  const { userId, ...sanitizedTask } = deletedTask;
-  return res.status(200).json(sanitizedTask);
+  // if (taskIndex === -1) {
+  //   return res.status(404).json({
+  //     message: "No matching task exists.",
+  //   });
+  // }
+
+  // const [deletedTask] = global.tasks.splice(taskIndex, 1);
+  // const { userId, ...sanitizedTask } = deletedTask;
+  // return res.status(200).json(sanitizedTask);
 };
 
 module.exports = {
