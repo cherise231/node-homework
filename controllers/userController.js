@@ -3,7 +3,8 @@ const util = require("util");
 const scrypt = util.promisify(crypto.scrypt);
 
 const { userSchema } = require("../validation/userSchema");
-const pool = require("../db/pg-pool");
+// const pool = require("../db/pg-pool");
+const prisma = require("../db/prisma");
 
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -27,19 +28,22 @@ async function register(req, res, next) {
 
   if (error) return res.status(400).json({ message: error.message });
 
-  const hashedPassword = await hashPassword(value.password);
+  value.hashedPassword = await hashPassword(value.password);
+  delete value.password; // Remove the plain password from the object
 
-  let result = null;
+  let user = null;
 
   try {
-    result = await pool.query(
-      `INSERT INTO users (email, name, hashed_password)
-       VALUES ($1, $2, $3)
-       RETURNING id, email, name`,
-      [value.email, value.name, hashedPassword],
-    );
+    user = await prisma.user.create({
+      data: {
+        name: value.name,
+        email: value.email,
+        hashedPassword: value.hashedPassword,
+      },
+      select: { name: true, email: true, id: true },
+    });
   } catch (e) {
-    if (e.code === "23505") {
+    if (e.name === "PrismaClientKnownRequestError" && e.code === "P2002") {
       return res.status(400).json({
         message: "Email already registered.",
       });
@@ -47,17 +51,6 @@ async function register(req, res, next) {
 
     return next(e);
   }
-
-  const user = result.rows[0];
-
-  // create a new user object
-  // const newUser = {
-  //   email: value.email,
-  //   name: value.name,
-  //   hashedPassword,
-  // };
-  // add that user to global.users
-  // global.users.push(newUser);
 
   //set global.user_id to that user
   global.user_id = user.id;
@@ -73,31 +66,20 @@ async function register(req, res, next) {
 async function logon(req, res) {
   // logon an existing user
   //read email and password from req.body
-  const { email, password } = req.body;
+  let { email, password } = req.body;
 
-  //find the matching user in global.users
-  // const user = global.users.find((u) => u.email === email);
-  // if (!user) {
-  //If the email or passwords do not match, return status 401
-  //   return res.status(401).json({
-  //     message: "Invalid email or password.",
-  //   });
-  // }
+  // Joi validation always converts the email to lower case
+  email = email.toLowerCase();
 
-  const result = await pool.query("SELECT * FROM users WHERE email = $1", [
-    email,
-  ]);
+  const user = await prisma.user.findUnique({ where: { email } });
 
-  if (result.rows.length === 0) {
+  if (!user) {
     return res.status(401).json({
       message: "Invalid email or password.",
     });
   }
 
-  const user = result.rows[0];
-
-  const goodCredentials =
-    user && (await comparePassword(password, user.hashed_password));
+  const goodCredentials = await comparePassword(password, user.hashedPassword);
 
   if (!goodCredentials) {
     //If the email or passwords do not match, return status 401
